@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:v-bind="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="UTF-8">
+    <title>Vue Todo</title>
+    <style>
+        .completed {
+            text-decoration: line-through;
+        }
+
+        .selected {
+            color: red;
+        }
+        .isNull{
+            border-color: red;
+        }
+
+        </style>
+</head>
+<body>
+<div id="todo-app">
+    <div>
+        <input type="button" value="全部标为完成" @click="markAllCompleted" v-if="hasTodo"/>
+        <input type="text" placeholder="添加 todo" v-model="newTodoTitle" @keyup.enter="addTodo"
+               v-bind:class="{isNull:emptyCheck}"/>
+        <input type="button" :class="{selected:intention == 'removed'}" value="回收站" @click="intention='removed'" />
+        <span v-if="emptyCheck">请输入内容</span>
+    </div>
+    <hr>
+    <div v-if="!hasRemovedTodo">
+        <br>
+        <input type="button" @click="restoreTodo" value="撤销"/>
+    </div>
+
+
+  <!-- ToDoList -->
+    <ul>
+        <li v-for="todo in filteredTodos" :key="todo.id">
+            <span :class="{completed:todo.completed}" @dblclick="editTodo(todo)"> {{ todo.title }} </span>
+            <input type="button" value="标为完成" @click="markAsCompleted(todo)" v-if="!todo.completed">
+            <input type="button" value="标为未完成" @click="markAsNoCompleted(todo)" v-if="todo.completed">
+            <input v-if="todo.removed" type="button" value="还原" @click="restoreHistoryTodo(todo)">
+            <input v-else="todo.removed" type="button" value="删除" @click="removeTodo(todo)">
+            <input type="text" value="编辑 todo..." v-if="rawEditTodo && todo.id === rawEditTodo.id"
+                   v-model="todo.title" v-focus="true" @keyup.enter="editDone(todo)" @keyup.esc="cancelEdit(todo)">
+        </li>
+    </ul>
+  <!-- end toDoList -->
+<div>
+    <span style="font-weight: bold" v-if="hasTodo && undoTodoCount">剩余 {{ undoTodoCount }} 项未完成 ---</span>
+    <span style="font-weight: bold" v-if="!undoTodoCount && checkUsed">全部完成，你真是太棒了！---</span>
+    <span>筛选：
+        <input type="button" :class="{selected:intention == 'all'}" value="全部" @click="intention='all'">
+        <input type="button" :class="{selected:intention == 'ongoing'}" value="进行中" @click="intention='ongoing'">
+        <input type="button" :class="{selected:intention == 'finished'}" value="已完成" @click="intention='finished'">
+        <input type="button" value="清除已完成" @click="cleanDoneTodo" v-if="hasTodo">
+        <input type="button" value="清除全部" @click="cleanAllTodo" v-if="hasTodo">
+    </span>
+</div>
+</div>
+<script src="vue.js"></script>
+<script>
+    var STORAGE_KEY = 'vue2.x-todo-tutorial';
+    var todoStorage = {
+        fetch: function () {
+            var todos = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+            todos.forEach(function (todo, index) {
+                todo.id = index
+            });
+            todoStorage.uid = todos.length;
+            return todos
+        },
+        save: function (todos) {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(todos))
+        }
+    };
+    let id = 0;
+    var app = new Vue({
+        el:'#todo-app',
+        data:function () {
+            return {
+                todos: todoStorage.fetch(),
+                newTodoTitle:'',
+                checkedflag:false,
+                checkUsed:false,
+                removedTodos:[],
+                rawEditTodo:null,
+                intention:'all',
+            }
+        },
+        watch: {
+            todos: {
+                handler: function (todos) {
+                    todoStorage.save(todos)
+                },
+                deep: true
+            }
+        },
+        methods: {
+            addTodo: function () {
+                if (this.newTodoTitle) {
+                    this.todos.push({id: todoStorage.uid++, title: this.newTodoTitle, completed: false,removed:false,});
+                    this.checkUsed = true
+                    this.newTodoTitle = ''
+                    this.checkedFlag = false
+                } else {
+                    this.checkedFlag = true
+                }
+            },
+            markAllCompleted:function(){
+                this.todos.map(function (item) {
+                    if(!item.completed) {
+                        item.completed = true
+                    }
+
+                })
+            },
+            markAsCompleted: function (todo) {
+                todo.completed = true
+            },
+            markAsNoCompleted: function (todo) {
+                todo.completed = false
+            },
+            removeTodo: function (todo) {
+                let removedTodo = this.todos.splice(this.todos.indexOf(todo), 1)[0];
+                removedTodo.removed = true;
+                this.removedTodos.push(removedTodo);
+            },
+            restoreTodo:function () {
+                let restoredTodo = this.removedTodos.pop();
+                restoredTodo.removed = false
+                this.todos.splice(restoredTodo.id,0,restoredTodo)
+            },
+            restoreHistoryTodo:function(todo){
+                todo.removed = false
+                this.todos.unshift(todo);
+                let pos = this.removedTodos.indexOf(todo);
+                this.removedTodos.splice(pos,1);
+
+            },
+            editTodo:function (todo) {
+                this.rawEditTodo = {id:todo.id,title: todo.title,completed: todo.completed}
+
+
+            },
+            editDone:function (todo) {
+                if(todo.title === ''){
+                    todo.title = this.rawEditTodo.title
+                    this.removeTodo(todo);
+                }
+
+                this.rawEditTodo = null
+
+            },
+            cancelEdit:function (todo) {
+                todo.title = this.rawEditTodo.title
+                this.rawEditTodo = null
+
+            },
+            cleanDoneTodo:function () {
+                if (!confirm("确认删除已完成项目？此操作不可逆！！")) {
+                    return 0
+                }
+                this.completedTodos.map(item => item.removed = true)
+                this.removedTodos.unshift(...this.completedTodos)
+                this.todos = this.undoTodos
+            },
+            cleanAllTodo:function () {
+                if (!confirm("确认删除所有项目？此操作不可逆！！")) {
+                    return 0
+                }
+                this.todos.map(item => item.removed = true)
+                this.removedTodos.unshift(...this.todos)
+                this.todos = []
+            },
+        },
+        computed:{
+            emptyCheck: function () {
+                return this.newTodoTitle.length === 0 && this.checkedFlag
+            },
+            hasRemovedTodo:function () {
+                return this.removedTodos.length === 0
+
+            },
+            undoTodoCount:function () {
+                return this.undoTodos.length
+            },
+            undoTodos:function () {
+                return this.todos.filter(item => item.completed === false)
+
+            },
+            completedTodos:function(){
+                return this.todos.filter(item => item.completed === true)
+            },
+
+            filteredTodos:function () {
+                if(this.intention === 'ongoing'){
+                    return this.undoTodos
+                }else if(this.intention === 'finished'){
+                    return this.todos.filter(item => item.completed === true)
+                }else if(this.intention === 'removed'){
+                    return this.removedTodos
+                }else{
+                    return this.todos
+                }
+
+            },
+            hasTodo:function () {
+                return this.todos.length
+
+            },
+        },
+        directives:{
+            focus:{
+                inserted:function (el) {
+                    el.focus()
+
+                }
+            }
+        },
+    })
+</script>
+</body>
+</html>
